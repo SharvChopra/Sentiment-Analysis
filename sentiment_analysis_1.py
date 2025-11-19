@@ -26,7 +26,6 @@ except FileNotFoundError:
     print("Please download the dataset from Kaggle and place it in this folder.")
     exit()
 
-# Convert 'positive'/'negative' labels to 1/0
 df['label'] = df['sentiment'].map({'positive': 1, 'negative': 0})
 
 print("Splitting data into training and test sets...")
@@ -38,18 +37,15 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=df['label']
 )
 
-# --- 3. Create TF-IDF Features ---
 print("Creating TF-IDF features...")
 vectorizer = TfidfVectorizer(max_features=VOCAB_SIZE, stop_words='english')
 X_train_tfidf = vectorizer.fit_transform(X_train)
 X_test_tfidf = vectorizer.transform(X_test)
 
-# --- 4. Define Individual Models ---
 print("Initializing individual models...")
 nb = MultinomialNB()
 lr = LogisticRegression(max_iter=1000)
 
-# --- 5. Define and Train Ensemble Model ---
 print("Training Ensemble Model (Voting Classifier)...")
 # 'soft' voting averages the probabilities of the inputs
 ensemble_model = VotingClassifier(
@@ -58,7 +54,6 @@ ensemble_model = VotingClassifier(
 )
 ensemble_model.fit(X_train_tfidf, y_train)
 
-# --- 6. Train Individual Models (for comparison) ---
 # We train these separately just so we can show their individual scores to the user
 print("Training individual models for comparison...")
 nb.fit(X_train_tfidf, y_train)
@@ -67,17 +62,14 @@ lr.fit(X_train_tfidf, y_train)
 # --- 7. Evaluate Models ---
 print("\n--- Evaluation Results ---")
 
-# Evaluate Naive Bayes
 nb_pred = nb.predict(X_test_tfidf)
 nb_acc = accuracy_score(y_test, nb_pred)
 print(f"1. Naive Bayes Accuracy:       {nb_acc * 100:.2f}%")
 
-# Evaluate Logistic Regression
 lr_pred = lr.predict(X_test_tfidf)
 lr_acc = accuracy_score(y_test, lr_pred)
 print(f"2. Logistic Regression Accuracy: {lr_acc * 100:.2f}%")
 
-# Evaluate Ensemble
 ens_pred = ensemble_model.predict(X_test_tfidf)
 ens_acc = accuracy_score(y_test, ens_pred)
 print(f"3. Ensemble (Combined) Accuracy: {ens_acc * 100:.2f}%")

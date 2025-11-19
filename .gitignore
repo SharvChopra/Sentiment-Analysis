@@ -11,6 +11,5 @@ Generated model files
 
 These are created by train_model.py and should not be in the repo
 
-*.joblib
 *.h5
 *.json
