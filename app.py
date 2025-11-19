@@ -1,116 +1,132 @@
 import streamlit as st
-import tensorflow as tf
-from tensorflow.keras.models import load_model  # type: ignore
-from tensorflow.keras.preprocessing.sequence import pad_sequences  # type: ignore
-from tensorflow.keras.preprocessing.text import tokenizer_from_json  # type: ignore
-import json
-import numpy as np
 import joblib
-import re
+import time
 
-MAX_LEN = 256
-
+# --- 1. Define Constants and Filenames ---
 TFIDF_VECTORIZER_FILE = 'tfidf_vectorizer.joblib'
 NAIVE_BAYES_FILE = 'naive_bayes_model.joblib'
 LOGREG_FILE = 'logistic_regression_model.joblib'
-LSTM_MODEL_FILE = 'lstm_model.h5'
-KERAS_TOKENIZER_FILE = 'keras_tokenizer.json'
+ENSEMBLE_FILE = 'ensemble_model.joblib'
+
+# --- 2. Load All Models and Preprocessors ---
 
 
 @st.cache_resource
 def load_models():
-    print("Loading all models...")
-    vectorizer = joblib.load(TFIDF_VECTORIZER_FILE)
-    model_nb = joblib.load(NAIVE_BAYES_FILE)
-    model_logreg = joblib.load(LOGREG_FILE)
-    model_lstm = load_model(LSTM_MODEL_FILE)
-
-    with open(KERAS_TOKENIZER_FILE) as f:
-        tokenizer_json = f.read()
-        keras_tokenizer = tokenizer_from_json(tokenizer_json)
-
-    print("All models loaded.")
-    return vectorizer, model_nb, model_logreg, model_lstm, keras_tokenizer
-
-
-try:
-    vectorizer, model_nb, model_logreg, model_lstm, keras_tokenizer = load_models()
-except FileNotFoundError:
-    st.error("Model files not found! Please run `python train_model.py` first to generate the model files.")
-    st.stop()
-
-
-def preprocess_text_keras(text, tokenizer, max_len):
     """
-    Preprocesses raw text for the Keras LSTM model.
+    Load the vectorizer and all three models (NB, LR, Ensemble).
+    Returns None if files are missing.
     """
-    sequence = tokenizer.texts_to_sequences([text])
-    padded_sequence = pad_sequences(
-        sequence, maxlen=max_len, padding='post', truncating='post')
-    return padded_sequence
+    try:
+        vectorizer = joblib.load(TFIDF_VECTORIZER_FILE)
+        model_nb = joblib.load(NAIVE_BAYES_FILE)
+        model_logreg = joblib.load(LOGREG_FILE)
+        model_ensemble = joblib.load(ENSEMBLE_FILE)
+        return vectorizer, model_nb, model_logreg, model_ensemble
+    except FileNotFoundError:
+        return None, None, None, None
+
+
+# Load the models when the app starts
+vectorizer, model_nb, model_logreg, model_ensemble = load_models()
+
+# --- 3. Helper Function for Displaying Results ---
 
 
 def display_result(probability):
     """
-    Helper function to display a styled result.
+    Displays a styled metric card for the sentiment.
+    Green for Positive, Red for Negative.
     """
     if probability > 0.5:
         confidence = probability * 100
-        st.success(f"**Positive** (Confidence: {confidence:.2f}%)")
+        st.success(f"**Positive**\n\nConfidence: {confidence:.1f}%")
     else:
         confidence = (1 - probability) * 100
-        st.error(f"**Negative** (Confidence: {confidence:.2f}%)")
+        st.error(f"**Negative**\n\nConfidence: {confidence:.1f}%")
+
+# --- 4. Streamlit UI Layout ---
 
 
-st.set_page_config(page_title="Sentiment Model Comparison", layout="wide")
-st.title("🎬 IMDB Sentiment Analysis: Model Comparison")
-st.markdown("Enter a movie review below to see how three different models (Naive Bayes, Logistic Regression, and LSTM) classify it.")
+# Page Config
+st.set_page_config(page_title="Sentiment Analysis Ensemble",
+                   layout="wide", page_icon="🎬")
 
-user_input = st.text_area("Your Movie Review:", height=150,
-                          placeholder="This movie was fantastic! The acting was superb and...")
+# Sidebar
+st.sidebar.header("ℹ️ About the Models")
+st.sidebar.markdown("""
+**1. Naive Bayes** A probabilistic model. Fast and effective for text, but treats words independently.
 
+**2. Logistic Regression** A linear model. Assigns a positive/negative "weight" to every word. Very robust.
+
+**3. 🏆 Ensemble (Voting Classifier)** **The Best Performer.** It combines the predictions of the first two models. 
+It uses "Soft Voting" to average the confidence scores, often correcting mistakes made by individual models.
+""")
+st.sidebar.markdown("---")
+st.sidebar.caption("Trained on IMDB 50k Dataset")
+
+# Main Page Title
+st.title("🎬 IMDB Sentiment Analysis")
+st.markdown("Enter a movie review. The models will analyze the sentiment and show their predictions.")
+
+# Error Handling: Check if models exist
+if vectorizer is None:
+    st.error("⚠️ **Models not found!**")
+    st.warning(
+        "Please run `python train_model.py` in your terminal first to train the models and generate the files.")
+    st.stop()
+
+# Input Area
+user_input = st.text_area("Type your movie review here:", height=150,
+                          placeholder="Example: The movie was visually stunning, but the plot was a bit boring...")
+
+# Analyze Button
 if st.button("Analyze Sentiment", type="primary"):
     if user_input:
-        try:
+        # Verify all models are loaded before proceeding
+        if model_nb is None or model_logreg is None or model_ensemble is None:
+            st.error("⚠️ **Models not loaded!** Please restart the app or check the model files.")
+        else:
+            with st.spinner("Analyzing text..."):
+                # Artificial delay for visual effect (optional)
+                time.sleep(0.5)
 
-            X_tfidf = vectorizer.transform([user_input])
+                # --- 1. Preprocess ---
+                # Transform user text into numbers using the trained TF-IDF vectorizer
+                X_tfidf = vectorizer.transform([user_input])
 
-            X_keras = preprocess_text_keras(
-                user_input, keras_tokenizer, MAX_LEN)
+                # --- 2. Predict with ALL models ---
+                # We get the probability of the "Positive" class (index 1)
+                prob_nb = model_nb.predict_proba(X_tfidf)[0][1]
+                prob_lr = model_logreg.predict_proba(X_tfidf)[0][1]
+                prob_ens = model_ensemble.predict_proba(X_tfidf)[0][1]
 
-            prob_nb = model_nb.predict_proba(
-                X_tfidf)[0]  # (prob_neg, prob_pos)
+            # --- 3. Display Results ---
+            st.subheader("Model Results Comparison")
 
-            prob_logreg = model_logreg.predict_proba(
-                X_tfidf)[0]  # (prob_neg, prob_pos)
-
-            prob_lstm = model_lstm.predict(X_keras)[0][0]
-
-            st.subheader("Model Predictions:")
             col1, col2, col3 = st.columns(3)
 
+            # Column 1: Naive Bayes
             with col1:
-                st.markdown("#### Naive Bayes")
-                st.markdown("_A fast, statistical 'bag-of-words' model._")
-                display_result(prob_nb[1])
+                st.markdown("##### 🤖 Naive Bayes")
+                display_result(prob_nb)
 
+            # Column 2: Logistic Regression
             with col2:
-                st.markdown("#### Logistic Regression")
-                st.markdown(
-                    "_A linear 'bag-of-words' model, strong baseline._")
-                display_result(prob_logreg[1])
+                st.markdown("##### 📈 Logistic Regression")
+                display_result(prob_lr)
 
+            # Column 3: Ensemble (Highlight this one)
             with col3:
-                st.markdown("#### LSTM Neural Network")
-                st.markdown(
-                    "_A deep learning model that reads words in sequence._")
-                display_result(prob_lstm)
+                st.markdown("##### 🏆 Ensemble (Combined)")
+                # Add a little extra visual emphasis
+                if round(prob_ens) == round(prob_lr) and round(prob_ens) == round(prob_nb):
+                    st.info("All models agree.")
+                else:
+                    st.info("Ensemble resolved a disagreement!")
 
-        except Exception as e:
-            st.error(f"An error occurred during prediction: {e}")
+                display_result(prob_ens)
+
     else:
-        st.warning("Please enter a review to analyze.")
+        st.warning("Please enter some text to analyze.")
 
-st.markdown("---")
-st.markdown(
-    "Models trained on the [IMDB dataset](https://www.tensorflow.org/datasets/catalog/imdb_reviews) using Scikit-learn and Keras.")
