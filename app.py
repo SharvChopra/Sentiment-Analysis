@@ -170,8 +170,8 @@ if bundle:
     )
 
 # --- Main UI ---
-st.title("🎬Sentiment Analysis")
-st.markdown("### Comparing Base Models vs. Stacking & Voting Ensembles")
+st.title("🎬IMDB Sentiment Analysis")
+st.markdown("Enter a movie review. The models will analyze the sentiment and show their predictions.")
 
 if not bundle:
     st.error(f"Model file '{MODEL_FILE}' not found. Please run your training script first.")
