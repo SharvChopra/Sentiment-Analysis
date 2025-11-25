@@ -122,13 +122,15 @@ import plotly.express as px  # For nice charts
 # --- Config ---
 st.set_page_config(
     page_title="Advanced Sentiment Lab",
-    layout="wide", 
+    layout="wide",
     page_icon="🧪"
 )
 
 MODEL_FILE = 'all_models.joblib'
 
 # --- Load Data ---
+
+
 @st.cache_resource
 def load_bundle():
     try:
@@ -136,6 +138,7 @@ def load_bundle():
         return data
     except FileNotFoundError:
         return None
+
 
 bundle = load_bundle()
 
@@ -148,22 +151,21 @@ st.sidebar.info(
 if bundle:
     # Get all model names from the file
     model_options = list(bundle['models'].keys())
-    
-    # FIX 1: Set default to 'model_options' so ALL models are selected by default
+
     selected_models = st.sidebar.multiselect(
         "Select Models to Compare",
         model_options,
-        default=model_options 
+        default=model_options
     )
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("Model Accuracies (Test Set)")
-    
+
     results_df = pd.DataFrame(
         list(bundle['results'].items()), columns=['Model', 'Accuracy']
     )
     results_df['Accuracy'] = results_df['Accuracy'] * 100
-    
+
     st.sidebar.dataframe(
         results_df.sort_values(by='Accuracy', ascending=False)
         .style.format({"Accuracy": "{:.2f}%"})
@@ -171,10 +173,12 @@ if bundle:
 
 # --- Main UI ---
 st.title("🎬IMDB Sentiment Analysis")
-st.markdown("Enter a movie review. The models will analyze the sentiment and show their predictions.")
+st.markdown(
+    "Enter a movie review. The models will analyze the sentiment and show their predictions.")
 
 if not bundle:
-    st.error(f"Model file '{MODEL_FILE}' not found. Please run your training script first.")
+    st.error(
+        f"Model file '{MODEL_FILE}' not found. Please run your training script first.")
     st.stop()
 
 vectorizer = bundle['vectorizer']
@@ -182,14 +186,14 @@ models_dict = bundle['models']
 
 # Input
 user_input = st.text_area(
-    "Enter Movie Review:", 
+    "Enter Movie Review:",
     height=100,
     placeholder="The cinematography was unique, but the plot fell flat..."
 )
 
 if st.button("Run Analysis", type="primary"):
     if user_input:
-        
+
         # Preprocess
         X_input = vectorizer.transform([user_input])
 
@@ -198,9 +202,9 @@ if st.button("Run Analysis", type="primary"):
 
         # Progress bar
         progress_bar = st.progress(0)
-        total_selected = len(selected_models) # type: ignore
+        total_selected = len(selected_models)  # type: ignore
 
-        for i, model_name in enumerate(selected_models): # type: ignore
+        for i, model_name in enumerate(selected_models):  # type: ignore
             model = models_dict[model_name]
 
             # Get prediction probability
@@ -229,20 +233,20 @@ if st.button("Run Analysis", type="primary"):
 
         # --- Display Results (Grid Layout) ---
         st.subheader("Analysis Results")
-        
-        # FIX 3: Grid Layout
-        # We create 4 columns. We use modulo math (%) to wrap items to the next row.
+
         cols = st.columns(4)
-        
+
         for idx, res in enumerate(predictions):
-            with cols[idx % 4]: # This places prediction 0 in col 0, pred 1 in col 1... pred 4 in col 0
+            with cols[idx % 4]:
                 st.markdown(f"**{res['Model']}**")
-                
+
                 if res['Sentiment'] == "Positive":
-                    st.success(f"{res['Sentiment']} ({res['Confidence']*100:.1f}%)")
+                    st.success(
+                        f"{res['Sentiment']} ({res['Confidence']*100:.1f}%)")
                 else:
-                    st.error(f"{res['Sentiment']} ({res['Confidence']*100:.1f}%)")
-                
+                    st.error(
+                        f"{res['Sentiment']} ({res['Confidence']*100:.1f}%)")
+
                 st.markdown("---")
 
         # --- Comparative Chart ---
@@ -250,7 +254,6 @@ if st.button("Run Analysis", type="primary"):
 
         pred_df = pd.DataFrame(predictions)
 
-        # Color logic for chart
         pred_df['Color'] = pred_df['Raw Score'].apply(
             lambda x: 'Positive' if x > 0.5 else 'Negative'
         )
@@ -265,10 +268,9 @@ if st.button("Run Analysis", type="primary"):
             title="Model Probability Scores (0=Neg, 1=Pos)"
         )
 
-        # Add a line at 0.5 decision boundary
         fig.add_hline(y=0.5, line_dash="dash", line_color="gray",
                       annotation_text="Decision Boundary")
-        
+
         st.plotly_chart(fig, use_container_width=True)
 
     else:
